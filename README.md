@@ -1,3 +1,13 @@
+---
+title: Rice Disease ML Service
+emoji: 🌾
+colorFrom: green
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # ml-service — Dự đoán bệnh lúa (FastAPI + PyTorch)
 
 Service Python độc lập, nhận ảnh lá lúa và trả về bệnh dự đoán kèm độ tin cậy.
