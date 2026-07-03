@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+# Model rice_disease.pt (32MB) ĐƯỢC push để deploy HF Spaces pull về là chạy ngay.
