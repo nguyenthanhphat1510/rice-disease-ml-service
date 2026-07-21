@@ -34,6 +34,8 @@ from typing import Dict, List
 
 from ultralytics import YOLO
 
+from .ood import OODDetector, try_load_detector
+
 # Thư mục chứa model + metadata, nằm cạnh package app/.
 MODELS_DIR = Path(os.getenv("MODELS_DIR", Path(__file__).resolve().parent.parent / "models"))
 MODEL_PATH = Path(os.getenv("MODEL_PATH", MODELS_DIR / "rice_disease.pt"))
@@ -55,6 +57,8 @@ class ModelBundle:
     labels: Dict[str, str]
     img_size: int
     device: str  # giữ để báo cáo ở /health (YOLO tự chọn device khi predict)
+    # tầng phát hiện ảnh lạ; None nếu thiếu ood_params.json / feature_stats.npz.
+    ood: "OODDetector | None" = None
 
     @property
     def classes(self) -> List[str]:
@@ -105,6 +109,7 @@ def load_model() -> ModelBundle:
         labels=_load_json("labels.json"),
         img_size=IMG_SIZE,
         device=device,
+        ood=try_load_detector(model, MODELS_DIR, device),
     )
 
 

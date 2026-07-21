@@ -1,0 +1,35 @@
+{
+  "temperature": 1.6923,
+  "class_names": [
+    "bacterial_leaf_blight",
+    "brown_spot",
+    "healthy",
+    "leaf_blast"
+  ],
+  "calibration": {
+    "nll_before": 0.0688,
+    "nll_after": 0.0523,
+    "ece_before": 0.0067,
+    "ece_after": 0.0046,
+    "val_accuracy": 0.9882
+  },
+  "energy_threshold": -6.8439,
+  "energy_eval": {
+    "id_mean": -13.363,
+    "near_ood_mean": -6.95,
+    "far_ood_mean": -4.151,
+    "near_auroc": 0.9136,
+    "far_auroc": 0.9867,
+    "tpr_target": 0.95
+  },
+  "distance_threshold": 0.757987,
+  "distance_eval": {
+    "id_mean": 0.5365,
+    "near_ood_mean": 0.7644,
+    "far_ood_mean": 0.8223,
+    "near_auroc": 0.8583,
+    "far_auroc": 0.9157,
+    "metric": "cosine",
+    "feature_dim": 1280
+  }
+}

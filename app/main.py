@@ -58,6 +58,7 @@ def health() -> dict:
         "model_loaded": _bundle is not None,
         "device": _bundle.device if _bundle else None,
         "num_classes": len(_bundle.names) if _bundle else 0,
+        "ood_enabled": bool(_bundle and _bundle.ood),
     }
 
 
@@ -77,16 +78,23 @@ def classes() -> dict:
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)) -> dict:
     """
-    Nhận 1 ảnh lá lúa (multipart field `file`), trả top-k bệnh kèm độ tin cậy.
+    Nhận 1 ảnh lá lúa (multipart field `file`), trả top-k bệnh kèm độ tin cậy
+    và trạng thái từ tầng phát hiện ảnh lạ (OOD).
 
     Response:
       {
+        "status": "KNOWN_DISEASE" | "NEED_MORE_INFORMATION" | "UNKNOWN_DISEASE",
+        "message": "...",                       // câu trả lời gợi ý cho người dùng
         "predictions": [
           { "class": "dao-on-la", "label": "Đạo ôn lá", "confidence": 0.94 },
           ...
         ],
-        "top": { "class": "dao-on-la", "label": "Đạo ôn lá", "confidence": 0.94 }
+        "top": { ... },                          // null khi status = UNKNOWN_DISEASE
+        "ood": { "energy_score": ..., "feature_distance": ..., ... }
       }
+
+    NestJS chỉ nên tra thuốc trong DB khi status = KNOWN_DISEASE; hai trạng thái
+    còn lại nên hiển thị `message` và xin thêm ảnh/mô tả.
     """
     if _bundle is None:
         raise HTTPException(status_code=503, detail="Model chưa sẵn sàng")
@@ -108,12 +116,76 @@ async def predict(file: UploadFile = File(...)) -> dict:
     except Exception:
         raise HTTPException(status_code=400, detail="Không đọc được ảnh")
 
+    if _bundle.ood is not None:
+        return _predict_with_ood(image, _bundle)
+
+    # Không có file OOD -> chạy chế độ cũ, luôn coi là biết bệnh.
     predictions = _infer(image, _bundle)
-    return {"predictions": predictions, "top": predictions[0]}
+    return {
+        "status": "KNOWN_DISEASE",
+        "message": _message("KNOWN_DISEASE", predictions),
+        "predictions": predictions,
+        "top": predictions[0],
+        "ood": None,
+    }
+
+
+def _predict_with_ood(image: Image.Image, bundle: ModelBundle) -> dict:
+    """Chạy 3 tín hiệu OOD, xếp hạng class theo xác suất đã hiệu chỉnh."""
+    res = bundle.ood.analyze(image)
+
+    ranked = sorted(res.probs_by_class.items(), key=lambda kv: -kv[1])
+    k = min(TOP_K, len(ranked))
+    predictions = []
+    for name, prob in ranked[:k]:
+        slug = bundle.slug_for(name)
+        predictions.append(
+            {
+                "class": slug,
+                "label": bundle.labels.get(slug, name),
+                "confidence": round(float(prob), 4),
+            }
+        )
+
+    return {
+        "status": res.status,
+        "message": _message(res.status, predictions),
+        "predictions": predictions,
+        # ảnh lạ thì không có bệnh nào đáng tra thuốc
+        "top": predictions[0] if res.status != "UNKNOWN_DISEASE" else None,
+        "ood": {
+            "energy_score": res.energy,
+            "energy_threshold": bundle.ood.e_thr,
+            "energy_is_ood": res.energy_is_ood,
+            "feature_distance": res.distance,
+            "distance_threshold": bundle.ood.d_thr,
+            "distance_is_ood": res.distance_is_ood,
+            "top_prob_calibrated": res.top_prob_calibrated,
+            "margin": res.margin,
+        },
+    }
+
+
+def _message(status: str, preds: List[dict]) -> str:
+    """Câu trả lời tiếng Việt cho từng trạng thái, để FE/chatbot hiển thị thẳng."""
+    if status == "KNOWN_DISEASE":
+        return f"Kết quả: {preds[0]['label']} ({preds[0]['confidence'] * 100:.1f}%)."
+    if status == "NEED_MORE_INFORMATION":
+        second = preds[1]["label"] if len(preds) > 1 else preds[0]["label"]
+        return (
+            "Chưa đủ tin cậy để kết luận. Một số đặc điểm gần với "
+            f"{preds[0]['label']} hoặc {second}, nhưng cần thêm hình ảnh cận cảnh "
+            "vết bệnh và mô tả triệu chứng."
+        )
+    return (
+        "Ảnh này không giống các bệnh trong hệ thống. Có thể là bệnh khác, ảnh "
+        "không phải lá lúa, hoặc điều kiện chụp chưa phù hợp. Vui lòng cung cấp "
+        "thêm ảnh và mô tả, hoặc hỏi ý kiến chuyên gia."
+    )
 
 
 def _infer(image: Image.Image, bundle: ModelBundle) -> List[dict]:
-    """Chạy YOLO-cls trên ảnh -> lấy top-k class từ results.probs."""
+    """Chạy YOLO-cls trên ảnh -> lấy top-k class từ results.probs (không có OOD)."""
     results = bundle.model.predict(
         source=image,
         imgsz=bundle.img_size,

@@ -5,3 +5,5 @@ pillow==11.1.0
 # Ultralytics (YOLO classification) — tự kéo theo torch + torchvision phiên bản CPU.
 # Nếu có GPU CUDA, cài torch/torchvision bản CUDA trước theo hướng dẫn pytorch.org.
 ultralytics==8.3.58
+# Tầng OOD dùng numpy trực tiếp (tính cosine tới tâm class trong feature_stats.npz).
+numpy
